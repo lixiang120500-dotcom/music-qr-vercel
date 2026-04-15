@@ -1,0 +1,9 @@
+{
+  "name": "music-qr-vercel",
+  "version": "1.0.0",
+  "description": "音乐二维码工具 - Vercel 部署版",
+  "private": true,
+  "engines": {
+    "node": ">=18"
+  }
+}
