@@ -107,7 +107,7 @@ async function getOrCreateRelease() {
   }
 }
 
-// ── 读写 songs.json ───────────────────────────────────────────
+// ── 读写 songs.json（main 分支）────────────────────────────────
 async function getSongs() {
   try {
     const r = await ghFetch('GET', `/repos/${GH_OWNER}/${GH_REPO}/contents/songs.json`);
@@ -124,6 +124,25 @@ async function saveSongs(songs, sha) {
   const payload = { message: 'update songs.json', content };
   if (sha) payload.sha = sha;
   await ghFetch('PUT', `/repos/${GH_OWNER}/${GH_REPO}/contents/songs.json`, JSON.stringify(payload));
+}
+
+// ── 同步写 gh-pages 分支的 songs.json（播放器直接读，不经过 Vercel）──
+async function syncGhPagesSongs(songs) {
+  try {
+    // 只保留播放器需要的字段，减小文件体积
+    const content = Buffer.from(JSON.stringify(songs, null, 2), 'utf-8').toString('base64');
+    // 先获取 gh-pages 分支上的 sha
+    let sha = null;
+    try {
+      const r = await ghFetch('GET', `/repos/${GH_OWNER}/${GH_REPO}/contents/songs.json?ref=gh-pages`);
+      sha = r.sha;
+    } catch(e) { /* 文件不存在则新建 */ }
+    const payload = { message: 'sync songs.json', content, branch: 'gh-pages' };
+    if (sha) payload.sha = sha;
+    await ghFetch('PUT', `/repos/${GH_OWNER}/${GH_REPO}/contents/songs.json`, JSON.stringify(payload));
+  } catch(e) {
+    console.error('syncGhPagesSongs failed:', e.message); // 非致命，不影响主流程
+  }
 }
 
 // ── 主处理函数 ────────────────────────────────────────────────
@@ -178,7 +197,7 @@ export default async function handler(req, res) {
     );
     const audioUrl = uploadResp.browser_download_url;
 
-    // 2. 更新 songs.json
+    // 2. 更新 songs.json（main 分支）
     const { songs, sha } = await getSongs();
     songs[songId] = {
       id: songId, title, artist, lyrics,
@@ -187,6 +206,9 @@ export default async function handler(req, res) {
       created_at: new Date().toISOString(),
     };
     await saveSongs(songs, sha);
+
+    // 3. 同步到 gh-pages 分支（播放器直接读，不经过 Vercel API）
+    await syncGhPagesSongs(songs);
 
     res.status(200).json({ song_id: songId, title });
 

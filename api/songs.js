@@ -46,6 +46,22 @@ async function saveSongs(songs, sha) {
   await ghFetch('PUT', `/repos/${GH_OWNER}/${GH_REPO}/contents/songs.json`, payload);
 }
 
+async function syncGhPagesSongs(songs) {
+  try {
+    const content = Buffer.from(JSON.stringify(songs, null, 2), 'utf-8').toString('base64');
+    let sha = null;
+    try {
+      const r = await ghFetch('GET', `/repos/${GH_OWNER}/${GH_REPO}/contents/songs.json?ref=gh-pages`);
+      sha = r.sha;
+    } catch(e) { /* 文件不存在则新建 */ }
+    const payload = { message: 'sync songs.json', content, branch: 'gh-pages' };
+    if (sha) payload.sha = sha;
+    await ghFetch('PUT', `/repos/${GH_OWNER}/${GH_REPO}/contents/songs.json`, JSON.stringify(payload));
+  } catch(e) {
+    console.error('syncGhPagesSongs failed:', e.message);
+  }
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, DELETE, OPTIONS');
@@ -90,6 +106,7 @@ export default async function handler(req, res) {
 
       delete songs[id];
       await saveSongs(songs, sha);
+      await syncGhPagesSongs(songs); // 同步到 gh-pages
       return res.status(200).json({ ok: true });
     }
 
