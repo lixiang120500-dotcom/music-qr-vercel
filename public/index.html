@@ -216,7 +216,8 @@
 
 <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
 <script>
-const PAGES_URL = 'https://lixiang120500-dotcom.github.io/music-qr';
+const PAGES_BASE = 'https://lixiang120500-dotcom.github.io/music-qr';
+const playerUrl  = id => `${PAGES_BASE}/player/?id=${id}`;
 let selectedColor = '#6c63ff';
 let currentSongId = null;
 let currentSongTitle = '';
@@ -311,14 +312,14 @@ async function uploadSong() {
 async function openQRModal(songId, title, artist) {
   currentSongId    = songId;
   currentSongTitle = title;
-  const playerUrl  = `${PAGES_URL}/player/${songId}`;
+  const url = playerUrl(songId);
 
   document.getElementById('modalTitle').textContent  = title;
   document.getElementById('modalArtist').textContent = artist || '未知歌手';
-  document.getElementById('modalUrl').textContent    = playerUrl;
-  document.getElementById('previewLink').href        = playerUrl;
+  document.getElementById('modalUrl').textContent    = url;
+  document.getElementById('previewLink').href        = url;
 
-  await drawRoundQR(playerUrl, document.getElementById('qrCanvas'));
+  await drawRoundQR(url, document.getElementById('qrCanvas'));
   document.getElementById('qrModal').classList.add('show');
 }
 
@@ -360,7 +361,7 @@ async function loadSongs() {
         </div>
         <div class="song-actions">
           <button class="icon-btn" title="查看二维码" onclick='showQR(${JSON.stringify(s)})'>📱</button>
-          <a class="icon-btn" title="播放" href="${PAGES_URL}/player/${s.id}" target="_blank">▶️</a>
+          <a class="icon-btn" title="播放" href="${playerUrl(s.id)}" target="_blank">▶️</a>
           <button class="icon-btn del" title="删除" onclick="deleteSong('${s.id}','${esc(s.title)}')">🗑️</button>
         </div>
       </div>`).join('');
