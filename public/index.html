@@ -214,7 +214,6 @@
 
 <div id="toast"></div>
 
-<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
 <script>
 const PAGES_BASE = 'https://lixiang120500-dotcom.github.io/music-qr';
 const playerUrl  = id => `${PAGES_BASE}/player/?id=${id}`;
@@ -223,22 +222,35 @@ let currentSongId = null;
 let currentSongTitle = '';
 
 // ── 圆形二维码（Canvas）──────────────────────────────────────
+// 调用 /api/qr 服务端生成，不依赖任何外部 CDN
 async function drawRoundQR(url, canvas) {
   const SIZE = 240;
   canvas.width = canvas.height = SIZE;
   const ctx = canvas.getContext('2d');
-  const off = document.createElement('canvas');
-  await QRCode.toCanvas(off, url, { width: SIZE, margin: 1, errorCorrectionLevel: 'H', color: { dark: '#000000', light: '#ffffff' } });
+
+  // 从服务端获取 QR 码图片
+  const apiUrl = `/api/qr?url=${encodeURIComponent(url)}&size=${SIZE}`;
+  const img = await new Promise((resolve, reject) => {
+    const i = new Image();
+    i.onload = () => resolve(i);
+    i.onerror = reject;
+    i.src = apiUrl;
+  });
+
+  // 计算内切正方形尺寸（保证定位角不被裁切）
   const inner  = Math.floor(SIZE / 1.42 * 0.88);
   const offset = Math.floor((SIZE - inner) / 2);
+
   ctx.clearRect(0, 0, SIZE, SIZE);
   ctx.save();
+  // 白色圆形背景
   ctx.beginPath();
   ctx.arc(SIZE/2, SIZE/2, SIZE/2, 0, Math.PI*2);
   ctx.fillStyle = '#ffffff';
   ctx.fill();
   ctx.clip();
-  ctx.drawImage(off, offset, offset, inner, inner);
+  // 二维码居中绘制在圆内
+  ctx.drawImage(img, offset, offset, inner, inner);
   ctx.restore();
 }
 
