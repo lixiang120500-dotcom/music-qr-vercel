@@ -193,7 +193,7 @@
 <div class="modal-overlay" id="qrModal">
   <div class="modal">
     <button class="modal-close" onclick="closeModal()">×</button>
-    <div class="perm-badge"><span class="perm-dot"></span>永久有效 · GitHub Pages</div>
+    <div class="perm-badge"><span class="perm-dot"></span>永久有效 · 全网可访问</div>
     <h3 id="modalTitle">—</h3>
     <div class="sub" id="modalArtist">—</div>
     <div class="qr-wrap">
@@ -215,8 +215,9 @@
 <div id="toast"></div>
 
 <script>
-const PAGES_BASE = 'https://lixiang120500-dotcom.github.io/music-qr';
-const playerUrl  = id => `${PAGES_BASE}/player/?id=${id}`;
+// 播放器部署在 Vercel 同域，国内移动网络可访问
+// 用 location.origin 动态获取域名，二维码里是完整 URL
+const playerUrl = id => `${location.origin}/player.html?id=${id}`;
 let selectedColor = '#6c63ff';
 let currentSongId = null;
 let currentSongTitle = '';

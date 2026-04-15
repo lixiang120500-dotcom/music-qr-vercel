@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>音乐播放器</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+    :root {
+      --primary: #6c63ff;
+      --bg: #0d0d1a;
+      --text: #ffffff;
+      --text2: rgba(255,255,255,0.6);
+      --text3: rgba(255,255,255,0.3);
+    }
+
+    html, body {
+      height: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Helvetica Neue', sans-serif;
+      user-select: none;
+    }
+
+    /* 背景渐变 */
+    #bgGradient {
+      position: fixed; inset: 0; z-index: 0;
+      transition: background 1.2s ease;
+    }
+    #bgOverlay {
+      position: fixed; inset: 0; z-index: 1;
+      background: rgba(0,0,0,0.42);
+    }
+
+    .player {
+      position: relative; z-index: 2;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      max-width: 480px;
+      margin: 0 auto;
+      padding: env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0);
+    }
+
+    /* 顶部栏 */
+    .top-bar {
+      display: flex;
+      align-items: center;
+      padding: 16px 20px 8px;
+      flex-shrink: 0;
+    }
+    .song-name {
+      flex: 1;
+      text-align: center;
+      font-size: 16px;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      padding: 0 12px;
+    }
+    .artist-name {
+      text-align: center;
+      font-size: 12px;
+      color: var(--text2);
+      padding-bottom: 4px;
+    }
+    .placeholder { width: 36px; flex-shrink: 0; }
+
+    /* 封面 */
+    .cover-section {
+      flex-shrink: 0;
+      display: flex;
+      justify-content: center;
+      padding: 12px 0 10px;
+    }
+    .cover-disc {
+      width: min(200px, 44vw);
+      height: min(200px, 44vw);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: min(72px, 16vw);
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+      animation: spin 20s linear infinite;
+      animation-play-state: paused;
+      position: relative;
+    }
+    .cover-disc::after {
+      content: '';
+      position: absolute;
+      width: 28%; height: 28%;
+      border-radius: 50%;
+      background: rgba(0,0,0,0.55);
+      border: 3px solid rgba(255,255,255,0.12);
+    }
+    .cover-disc.playing { animation-play-state: running; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* 歌词区 */
+    .lyrics-section {
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+      padding: 0 24px;
+      min-height: 0;
+    }
+    .lyrics-section::before, .lyrics-section::after {
+      content: '';
+      position: absolute;
+      left: 0; right: 0;
+      height: 56px;
+      z-index: 2;
+      pointer-events: none;
+    }
+    .lyrics-section::before { top: 0; background: linear-gradient(to bottom, rgba(0,0,0,0.55), transparent); }
+    .lyrics-section::after  { bottom: 0; background: linear-gradient(to top, rgba(0,0,0,0.55), transparent); }
+
+    .lyrics-scroll {
+      height: 100%;
+      overflow-y: auto;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+      padding: 70px 0;
+    }
+    .lyrics-scroll::-webkit-scrollbar { display: none; }
+
+    .lyric-line {
+      text-align: center;
+      padding: 9px 0;
+      font-size: 15px;
+      line-height: 1.6;
+      color: rgba(255,255,255,0.35);
+      transition: color 0.4s, font-size 0.3s, font-weight 0.3s;
+      cursor: pointer;
+    }
+    .lyric-line.active {
+      color: #ffffff;
+      font-size: 17px;
+      font-weight: 600;
+    }
+    .no-lyrics {
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text3);
+      font-size: 14px;
+    }
+
+    /* 进度条 */
+    .progress-section {
+      flex-shrink: 0;
+      padding: 6px 24px 2px;
+    }
+    .time-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--text2);
+      margin-bottom: 7px;
+    }
+    .progress-track {
+      height: 4px;
+      background: rgba(255,255,255,0.18);
+      border-radius: 2px;
+      cursor: pointer;
+      position: relative;
+    }
+    .progress-fill {
+      height: 100%;
+      background: white;
+      border-radius: 2px;
+      width: 0%;
+      pointer-events: none;
+      transition: width 0.4s linear;
+    }
+    .progress-thumb {
+      position: absolute;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      width: 13px; height: 13px;
+      border-radius: 50%;
+      background: white;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+      left: 0%;
+      pointer-events: none;
+      transition: left 0.4s linear;
+    }
+
+    /* 控制区 */
+    .controls {
+      flex-shrink: 0;
+      padding: 10px 24px 18px;
+    }
+    .main-controls {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+    .ctrl-btn {
+      background: none; border: none;
+      color: rgba(255,255,255,0.55);
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: color 0.2s, transform 0.15s;
+      padding: 8px; border-radius: 50%;
+    }
+    .ctrl-btn:hover { color: white; }
+    .ctrl-btn:active { transform: scale(0.88); }
+
+    .play-btn {
+      width: 62px; height: 62px;
+      border-radius: 50%;
+      background: white;
+      color: #1a1a2e !important;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+    }
+    .play-btn:hover { transform: scale(1.05) !important; }
+    .play-btn:active { transform: scale(0.95) !important; }
+
+    /* 音量 */
+    .volume-row {
+      display: flex; align-items: center; gap: 10px;
+    }
+    .vol-icon { font-size: 15px; color: var(--text2); }
+    .volume-track {
+      flex: 1; height: 4px;
+      background: rgba(255,255,255,0.18);
+      border-radius: 2px; cursor: pointer; position: relative;
+    }
+    .volume-fill {
+      height: 100%;
+      background: rgba(255,255,255,0.65);
+      border-radius: 2px;
+      width: 80%;
+      pointer-events: none;
+    }
+
+    /* 加载 / 错误 */
+    .overlay-screen {
+      position: fixed; inset: 0; z-index: 100;
+      background: var(--bg);
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 14px; padding: 32px; text-align: center;
+    }
+    .spinner {
+      width: 44px; height: 44px;
+      border: 3px solid rgba(255,255,255,0.1);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    .overlay-screen p { color: var(--text2); font-size: 14px; }
+    .overlay-screen .big-icon { font-size: 60px; }
+  </style>
+</head>
+<body>
+
+<div id="bgGradient"></div>
+<div id="bgOverlay"></div>
+
+<!-- 加载中 -->
+<div class="overlay-screen" id="loadingScreen">
+  <div class="spinner"></div>
+  <p>加载中...</p>
+</div>
+
+<!-- 错误 -->
+<div class="overlay-screen" id="errorScreen" style="display:none">
+  <div class="big-icon">😢</div>
+  <h2>歌曲不存在</h2>
+  <p id="errorMsg">该歌曲可能已被删除</p>
+</div>
+
+<!-- 播放器 -->
+<div class="player" id="playerMain" style="display:none">
+
+  <div class="top-bar">
+    <div class="placeholder"></div>
+    <div style="flex:1;text-align:center">
+      <div class="song-name" id="songName">—</div>
+      <div class="artist-name" id="artistName">—</div>
+    </div>
+    <div class="placeholder"></div>
+  </div>
+
+  <div class="cover-section">
+    <div class="cover-disc" id="coverDisc">🎵</div>
+  </div>
+
+  <div class="lyrics-section">
+    <div class="lyrics-scroll" id="lyricsScroll">
+      <div class="no-lyrics" id="noLyrics">暂无歌词</div>
+    </div>
+  </div>
+
+  <div class="progress-section">
+    <div class="time-row">
+      <span id="curTime">0:00</span>
+      <span id="totTime">0:00</span>
+    </div>
+    <div class="progress-track" id="progressTrack">
+      <div class="progress-fill" id="progressFill"></div>
+      <div class="progress-thumb" id="progressThumb"></div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <div class="main-controls">
+      <!-- 循环模式 -->
+      <button class="ctrl-btn" id="loopBtn" onclick="toggleLoop()" title="循环">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+          <polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+        </svg>
+      </button>
+      <!-- 后退 5s -->
+      <button class="ctrl-btn" onclick="audio.currentTime=Math.max(0,audio.currentTime-5)" title="后退5秒">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M11.99 5V1l-5 5 5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6h-2c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/>
+          <text x="7.5" y="15.5" font-size="5.5" fill="white" font-family="sans-serif" font-weight="bold">5</text>
+        </svg>
+      </button>
+      <!-- 播放/暂停 -->
+      <button class="ctrl-btn play-btn" id="playBtn" onclick="togglePlay()">
+        <svg id="playIcon" width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M8 5v14l11-7z"/>
+        </svg>
+      </button>
+      <!-- 前进 5s -->
+      <button class="ctrl-btn" onclick="audio.currentTime=Math.min(audio.duration||0,audio.currentTime+5)" title="前进5秒">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12.01 5V1l5 5-5 5V7c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6h2c0 4.42-3.58 8-8 8s-8-3.58-8-8 3.58-8 8-8z"/>
+          <text x="7.5" y="15.5" font-size="5.5" fill="white" font-family="sans-serif" font-weight="bold">5</text>
+        </svg>
+      </button>
+      <!-- 重播 -->
+      <button class="ctrl-btn" onclick="audio.currentTime=0;audio.play()" title="重新播放">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="1 4 1 10 7 10"/>
+          <path d="M3.51 15a9 9 0 1 0 .49-4.5"/>
+        </svg>
+      </button>
+    </div>
+
+    <div class="volume-row">
+      <span class="vol-icon">🔈</span>
+      <div class="volume-track" id="volumeTrack">
+        <div class="volume-fill" id="volumeFill"></div>
+      </div>
+      <span class="vol-icon">🔊</span>
+    </div>
+  </div>
+</div>
+
+<audio id="audio" preload="auto" crossorigin="anonymous"></audio>
+
+<script>
+  // ── 从 URL query 参数取歌曲 ID ───────────────────────────
+  // URL 格式: /player/?id=<song_id>  或  /player/index.html?id=<song_id>
+  const songId = new URLSearchParams(location.search).get('id') || '';
+
+  // 数据源：Vercel API（同域，无跨域问题，国内移动网络可访问）
+  const API_URL = '/api/songs';
+
+  const audio = document.getElementById('audio');
+  let lyrics = [], curLyricIdx = -1, isLooping = true, isDragging = false;
+
+  // ── 初始化 ────────────────────────────────────────────────
+  async function init() {
+    try {
+      // 从 Vercel API 读取单首歌曲数据
+      const res = await fetch(`${API_URL}?id=${encodeURIComponent(songId)}`);
+      if (!res.ok) throw new Error('歌曲加载失败');
+      const song = await res.json();
+      if (song.error) throw new Error(song.error);
+      if (!song.id) throw new Error('歌曲不存在');
+
+      // 应用主题色
+      applyColor(song.cover_color || '#6c63ff');
+
+      document.getElementById('songName').textContent   = song.title;
+      document.getElementById('artistName').textContent = song.artist || '未知歌手';
+      document.title = song.title;
+
+      // 设置音频源（GitHub Release 直链）
+      audio.src  = song.audio_url;
+      audio.loop = isLooping;
+
+      // 解析歌词
+      if (song.lyrics && song.lyrics.trim()) {
+        lyrics = parseLyrics(song.lyrics);
+        renderLyrics();
+      }
+
+      document.getElementById('loadingScreen').style.display = 'none';
+      document.getElementById('playerMain').style.display    = 'flex';
+      document.getElementById('loopBtn').style.color         = 'white';
+
+      // 自动播放
+      audio.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
+
+    } catch (e) {
+      document.getElementById('loadingScreen').style.display = 'none';
+      document.getElementById('errorScreen').style.display   = 'flex';
+      document.getElementById('errorMsg').textContent        = e.message;
+    }
+  }
+
+  // ── 主题色 ────────────────────────────────────────────────
+  function applyColor(hex) {
+    const r = parseInt(hex.slice(1,3),16);
+    const g = parseInt(hex.slice(3,5),16);
+    const b = parseInt(hex.slice(5,7),16);
+    document.getElementById('bgGradient').style.background =
+      `radial-gradient(ellipse at 30% 20%, rgba(${r},${g},${b},0.75) 0%, rgba(${Math.round(r*.3)},${Math.round(g*.3)},${Math.round(b*.3)},0.5) 50%, #0d0d1a 100%)`;
+    document.getElementById('coverDisc').style.background =
+      `linear-gradient(135deg, ${hex}, rgb(${Math.round(r*.5)},${Math.round(g*.5)},${Math.round(b*.5)}))`;
+  }
+
+  // ── 歌词解析 ──────────────────────────────────────────────
+  function parseLyrics(raw) {
+    const lrc = /^\[(\d{1,2}):(\d{2})(?:[.:](\d{1,3}))?\]\s*(.*)/;
+    const parsed = [];
+    for (const line of raw.split('\n')) {
+      const m = line.match(lrc);
+      if (m) {
+        const t = parseInt(m[1])*60 + parseInt(m[2]) + (m[3] ? parseInt(m[3].padEnd(3,'0'))/1000 : 0);
+        if (m[4].trim()) parsed.push({ time: t, text: m[4].trim() });
+      }
+    }
+    if (parsed.length) { parsed.sort((a,b)=>a.time-b.time); return parsed; }
+    // 纯文本
+    return raw.split('\n').filter(l=>l.trim()).map(text => ({ time: -1, text }));
+  }
+
+  function renderLyrics() {
+    if (!lyrics.length) return;
+    document.getElementById('noLyrics').style.display = 'none';
+    document.getElementById('lyricsScroll').innerHTML =
+      lyrics.map((l,i) =>
+        `<div class="lyric-line" id="ly${i}" onclick="seekLyric(${i})">${esc(l.text)}</div>`
+      ).join('');
+  }
+
+  function seekLyric(i) {
+    if (lyrics[i]?.time >= 0) audio.currentTime = lyrics[i].time;
+  }
+
+  // ── 歌词同步 ──────────────────────────────────────────────
+  function syncLyrics(t) {
+    if (!lyrics.length) return;
+    let idx = -1;
+    if (lyrics[0].time < 0) {
+      // 纯文本：按进度均匀
+      idx = Math.min(Math.floor(t / (audio.duration||1) * lyrics.length), lyrics.length-1);
+    } else {
+      for (let i = lyrics.length-1; i >= 0; i--) {
+        if (t >= lyrics[i].time) { idx = i; break; }
+      }
+    }
+    if (idx === curLyricIdx) return;
+    if (curLyricIdx >= 0) document.getElementById(`ly${curLyricIdx}`)?.classList.remove('active');
+    curLyricIdx = idx;
+    if (idx >= 0) {
+      const el = document.getElementById(`ly${idx}`);
+      if (el) {
+        el.classList.add('active');
+        const sc = document.getElementById('lyricsScroll');
+        sc.scrollTo({ top: el.offsetTop - sc.clientHeight/2 + el.offsetHeight/2, behavior: 'smooth' });
+      }
+    }
+  }
+
+  // ── 播放控制 ──────────────────────────────────────────────
+  function togglePlay() {
+    audio.paused
+      ? audio.play().then(()=>setPlaying(true)).catch(()=>{})
+      : (audio.pause(), setPlaying(false));
+  }
+
+  function setPlaying(p) {
+    document.getElementById('coverDisc').classList.toggle('playing', p);
+    document.getElementById('playIcon').innerHTML = p
+      ? '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>'
+      : '<path d="M8 5v14l11-7z"/>';
+  }
+
+  function toggleLoop() {
+    isLooping = !isLooping;
+    audio.loop = isLooping;
+    document.getElementById('loopBtn').style.color = isLooping ? 'white' : '';
+  }
+
+  // ── 进度条 ────────────────────────────────────────────────
+  audio.addEventListener('timeupdate', () => {
+    if (isDragging) return;
+    const pct = audio.duration ? audio.currentTime / audio.duration * 100 : 0;
+    document.getElementById('progressFill').style.width  = pct + '%';
+    document.getElementById('progressThumb').style.left  = pct + '%';
+    document.getElementById('curTime').textContent = fmt(audio.currentTime);
+    document.getElementById('totTime').textContent = fmt(audio.duration);
+    syncLyrics(audio.currentTime);
+  });
+  audio.addEventListener('play',  () => setPlaying(true));
+  audio.addEventListener('pause', () => setPlaying(false));
+
+  const track = document.getElementById('progressTrack');
+  function seekAt(e) {
+    const rect = track.getBoundingClientRect();
+    const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
+    audio.currentTime = Math.max(0, Math.min(1, x/rect.width)) * (audio.duration||0);
+  }
+  track.addEventListener('click', seekAt);
+  track.addEventListener('mousedown', e => { isDragging=true; seekAt(e); });
+  track.addEventListener('touchstart', e => { isDragging=true; seekAt(e); }, {passive:true});
+  document.addEventListener('mousemove', e => { if(isDragging) seekAt(e); });
+  document.addEventListener('touchmove', e => { if(isDragging) seekAt(e); }, {passive:true});
+  document.addEventListener('mouseup',  () => isDragging=false);
+  document.addEventListener('touchend', () => isDragging=false);
+
+  // 音量
+  document.getElementById('volumeTrack').addEventListener('click', e => {
+    const rect = document.getElementById('volumeTrack').getBoundingClientRect();
+    const pct  = Math.max(0, Math.min(1, (e.clientX-rect.left)/rect.width));
+    audio.volume = pct;
+    document.getElementById('volumeFill').style.width = pct*100+'%';
+  });
+
+  // ── 工具 ──────────────────────────────────────────────────
+  function fmt(s) {
+    if (!s || isNaN(s)) return '0:00';
+    return `${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,'0')}`;
+  }
+  function esc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  init();
+</script>
+</body>
+</html>
